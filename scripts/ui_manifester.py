@@ -550,11 +550,16 @@ class UIManifester(QWidget):
             self.keep_on_top = settings["keep_on_top"]
             self.event_reminder = settings['event_reminder']
             self.apply_keep_on_top()
+            self.apply_event_reminder()
 
     def apply_keep_on_top(self):
         """根据设置应用窗口是否置顶"""
         self.setWindowFlag(Qt.WindowStaysOnTopHint, self.keep_on_top)
         self.show()  # 重新显示以应用 flag
+
+    def apply_event_reminder(self):
+        self.setWindowFlag(Qt.WindowStaysOnTopHint, self.event_reminder)
+        self.show()
 
 
 if __name__ == "__main__":

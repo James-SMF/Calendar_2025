@@ -32,7 +32,7 @@ class SettingsDialog(QDialog):
     def get_settings(self):
         return {
             "keep_on_top": self.chk_keep_on_top.isChecked(),
-            "event_reminder": self.event_reminder
+            "event_reminder": self.chk_event_reminder.isChecked()
         }
     
 if __name__ == "__main__":
