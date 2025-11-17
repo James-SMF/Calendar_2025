@@ -6,7 +6,7 @@ from utils.data_manager import DataManager
 class UIDManager:
     def __init__(self, event_map, uid_file):
         if not os.path.exists(uid_file):
-            with open(uid_file, 'w') as f:
+            with open(uid_file, 'w', encoding='utf-8') as f:
                 f.write('')
 
         self.event_map = event_map
@@ -16,7 +16,7 @@ class UIDManager:
 
     def convert_uid_file_to_set(self):
         uid_set = set()
-        with open(self.uid_file, 'r') as f:
+        with open(self.uid_file, 'r', encoding='utf-8') as f:
             data = f.readlines()
             for d in data:
                 uid_set.add(d.strip())
@@ -24,7 +24,7 @@ class UIDManager:
         return uid_set
 
     def write_set_to_uid_file(self):
-        with open(self.uid_file, 'w') as f:
+        with open(self.uid_file, 'w', encoding='utf-8') as f:
             for uid in self.uid_set:
                 f.write(uid)
                 f.write('\n')

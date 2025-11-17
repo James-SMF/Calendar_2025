@@ -290,7 +290,7 @@ class UIManifester(QWidget):
     def on_save(self):
         with self.operation_lock:
             uid = self.precheck_and_get_uid()
-            
+
             self.select_item_by_uid(uid)
             if uid:
                 self.clear_inputs()
@@ -401,11 +401,15 @@ class UIManifester(QWidget):
 
                 self.event_list.addItem(item)
 
+            item_to_remove_from_reminded_event = set()
             for (uid, timestr) in self.reminded_events:
                 now = datetime.now()
                 event_time = TimeFormatter(timestr).parse_time()
                 if event_time < now:
-                    self.reminded_events.remove((uid, timestr))
+                    item_to_remove_from_reminded_event.add((uid, timestr))
+
+            for (uid, timestr) in item_to_remove_from_reminded_event:
+                self.reminded_events.remove((uid, timestr))
 
     def show_event_detail(self, item, prev=None):
 
@@ -415,7 +419,7 @@ class UIManifester(QWidget):
 
         if item is None:
             return
-        
+
         uid = item.data(Qt.UserRole)
 
         try:
@@ -423,7 +427,7 @@ class UIManifester(QWidget):
         except Exception as e:
             QMessageBox.warning(self, "错误", f"读取事件失败: {e}")
             return
-        
+
         event_manager = EventContentManager(event)
         event_manager.n_to_newline()
         event = event_manager.event_str
@@ -463,9 +467,8 @@ class UIManifester(QWidget):
             if item.data(Qt.UserRole) == uid:
                 self.event_list.setCurrentItem(item)
                 return
-            
+
     def check_upcoming_events(self):
-        print(self.reminded_events)
         if self.event_reminder == False:
             return
 
@@ -485,7 +488,7 @@ class UIManifester(QWidget):
                 self.show_event_reminder(uid, event_time, event, priority, finished)
 
         # 不能直接删除字典里的项，所以需要先记录，后删除
-        for (uid, _) in self.remove_reminded_events:
+        for uid in self.remove_reminded_events:
             self.on_delete(uid)
 
         self.remove_reminded_events.clear()
@@ -511,12 +514,17 @@ class UIManifester(QWidget):
         elif msg.clickedButton() == delay_btn:
             new_time = datetime.now() + timedelta(hours=1)
             new_time_str = new_time.strftime("%Y%m%d%H%M")
+
+            # 更新数据库里的事件（和 reminded_events 里的事件是独立的，没啥关系）
             self.event_scheduler.update_event(uid, (new_time_str, event, priority, finished))
             self.load_events()
-            self.reminded_events.remove(uid)
+
+            # 仅 match uid 即可，不需要管时间
+            self.reminded_events = set((a, b) for (a, b) in self.reminded_events if a != uid)
+
         elif msg.clickedButton() == delete_btn:
             self.remove_reminded_events.add(uid)
-            self.reminded_events.remove(uid)
+            self.reminded_events.remove((uid, event_time.strftime("%Y%m%d%H%M")))
 
 
     def keyPressEvent(self, event):
@@ -554,12 +562,15 @@ class UIManifester(QWidget):
 
     def apply_keep_on_top(self):
         """根据设置应用窗口是否置顶"""
+        print('apply_keep_on_top', self.keep_on_top)
         self.setWindowFlag(Qt.WindowStaysOnTopHint, self.keep_on_top)
         self.show()  # 重新显示以应用 flag
 
     def apply_event_reminder(self):
-        self.setWindowFlag(Qt.WindowStaysOnTopHint, self.event_reminder)
-        self.show()
+        if self.event_reminder:
+            self.timer.start(60 * 1000)
+        else:
+            self.timer.stop()
 
 
 if __name__ == "__main__":

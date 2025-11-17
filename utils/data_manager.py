@@ -1,9 +1,11 @@
+# -*- coding: utf-8 -*-
+
 import os
 
 class DataManager:
     def __init__(self, data_file):
         if not os.path.exists(data_file):
-            with open(data_file, 'w') as f:
+            with open(data_file, 'w', encoding='utf-8') as f:
                 f.write('')
 
         self.data_file = data_file
@@ -13,7 +15,7 @@ class DataManager:
 
         updated_event_map = dict()
 
-        with open(self.data_file, 'r') as f:
+        with open(self.data_file, 'r', encoding='utf-8') as f:
             data = f.readlines()
             for d in data:
                 if d.strip() == '':
@@ -33,7 +35,7 @@ class DataManager:
         注意先读文件再写，要不然有空数据覆盖的风险
         '''
 
-        with open(self.data_file, 'w') as f:
+        with open(self.data_file, 'w', encoding='utf-8') as f:
             for uid, (time, event, priority, finished) in self.event_map.items():
                 data = f'{uid};;++{time};;++{event};;++{priority};;++{finished}\n'
                 f.write(data)
