@@ -2,12 +2,10 @@
 
 import sys
 import threading
-import time
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout,
-    QListWidget, QPushButton, QLabel, QLineEdit, QTextEdit,
-    QSpinBox, QMessageBox, QListWidgetItem, QAbstractItemView,
-    QComboBox, QShortcut
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QLabel, 
+    QMessageBox, QListWidgetItem, QAbstractItemView, QShortcut, QPushButton, 
+    QLineEdit, QSpinBox, QTextEdit, QComboBox
 )
 from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QEvent, QEasingCurve
 from PyQt5.QtGui import QColor, QFont, QKeySequence
@@ -15,15 +13,27 @@ from datetime import datetime, timedelta
 from utils.data_manager import DataManager
 from utils.time_formatter import TimeFormatter
 from utils.event_content_manager import EventContentManager
+from utils.theme_manager import ThemeManager
+from utils.config_loader import ConfigLoader
 from scripts.event_scheduler import EventScheduler
 from scripts.ui_setting import SettingsDialog
 
 
 class UIManifester(QWidget):
     def __init__(self, data_manager, event_len):
+        # 初始化
         super().__init__()
         self.data_manager = data_manager
         self.event_scheduler = EventScheduler(self.data_manager)
+
+        # ================= Settings =====================
+
+        self.config = ConfigLoader().config
+        self.theme = self.config['theme']
+        self.keep_on_top = self.config['keep_on_top']
+        self.event_reminder = self.config['event_reminder']
+
+        # ================================================
 
         # ==================== UI =====================
 
@@ -35,8 +45,12 @@ class UIManifester(QWidget):
         self.anim.setEasingCurve(QEasingCurve.InOutQuad)
         self.anim.setDuration(300)
 
-        # main_bg_color = "#D5F2F6"
-        # self.setStyleSheet(f"background-color: {main_bg_color};")
+
+        # 主题管理
+        self.theme_manager = ThemeManager(self.theme, self)
+        self.theme_color_map = self.theme_manager.set_theme_color()
+
+        self.dlg = SettingsDialog(self, self.config)
 
         main_layout = QHBoxLayout()
         self.setLayout(main_layout)
@@ -44,7 +58,9 @@ class UIManifester(QWidget):
         self.left_layout = QVBoxLayout()
 
         # 左侧事件列表
-        monospace_font = QFont("Menlo", 14, QFont.Normal)
+        monospace_font = QFont("Noto Sans CJK SC", 14, QFont.Normal)
+        monospace_font.setBold(True)
+
         self.event_list = QListWidget()
         self.event_list.setFont(monospace_font)
         self.event_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
@@ -56,15 +72,17 @@ class UIManifester(QWidget):
 
         self.event_list.currentItemChanged.connect(self.show_event_detail)
         self.event_list.itemClicked.connect(self.show_event_detail)
+        self.event_list.installEventFilter(self)
         self.left_layout.addWidget(self.event_list, 2)
 
         # 一键清理过期事件
-        self.cleanup_outdated_btn = QPushButton("清理过期事件")
+        self.cleanup_outdated_btn = self.theme_manager.create_btn("一键清理过期事件")
+
         self.cleanup_outdated_btn.clicked.connect(self.cleanup_outdated_events)
         self.left_layout.addWidget(self.cleanup_outdated_btn)
 
         # 过滤下拉菜单
-        self.filter_combo = QComboBox()
+        self.filter_combo = self.theme_manager.create_filter_combo()
         self.filter_combo.addItems([
             "显示全部事件",
             "仅显示高优先级",
@@ -75,7 +93,7 @@ class UIManifester(QWidget):
         self.left_layout.addWidget(self.filter_combo)
 
         # 排序下拉菜单
-        self.sort_combo = QComboBox()
+        self.sort_combo = self.theme_manager.create_filter_combo()
         self.sort_combo.addItems([
             "按时间排序",
             "按优先级排序"
@@ -90,33 +108,27 @@ class UIManifester(QWidget):
 
         info_and_setting_layout = QHBoxLayout()
         self.mode_label = QLabel("当前模式: 新建")
-        self.mode_label.setStyleSheet("color: #6813A4; font-weight: bold;")
-        self.btn_settings = QPushButton("⚙️ 设置")
+        self.mode_label.setStyleSheet(f"color: {self.theme_color_map['new']}; font-weight: bold;")
+        self.btn_settings = self.theme_manager.create_btn("⚙️ 设置")
         self.btn_settings.setFixedSize(70, 30)
         self.btn_settings.clicked.connect(self.open_settings)
 
         info_and_setting_layout.addWidget(self.mode_label)
         info_and_setting_layout.addWidget(self.btn_settings)
 
-        self.time_input = QLineEdit()
-        self.time_input.setPlaceholderText('时间，如 2025-11-16 17:56')
-
-        self.event_input = QTextEdit()
-        self.event_input.setPlaceholderText("事件描述")
-
-        self.priority_input = QSpinBox()
-        self.priority_input.setRange(1, 10)
-        self.priority_input.setValue(3)
+        self.time_input = self.theme_manager.create_line_edit('时间，如 2025-11-16 17:56')
+        self.event_input = self.theme_manager.create_text_edit("事件描述")
+        self.priority_input = self.theme_manager.create_spin_box(1, 10, 3)
 
         # 操作按钮
         btn_layout = QHBoxLayout()
-        self.new_btn = QPushButton("+")
+        self.new_btn = self.theme_manager.create_btn("+")
         self.new_btn.setToolTip("新建事件")
         self.new_btn.setFixedWidth(36)
 
-        self.save_btn = QPushButton("保存")
-        self.delete_btn = QPushButton("删除事件")
-        self.check_btn = QPushButton("切换完成/未完成状态")
+        self.save_btn = self.theme_manager.create_btn("保存")
+        self.delete_btn = self.theme_manager.create_btn("删除事件")
+        self.check_btn = self.theme_manager.create_btn("切换完成/未完成状态")
 
         btn_layout.addWidget(self.new_btn)
         btn_layout.addWidget(self.save_btn)
@@ -130,11 +142,11 @@ class UIManifester(QWidget):
 
         # 组装右侧功能
         right_layout.addLayout(info_and_setting_layout)
-        right_layout.addWidget(QLabel("时间"))
+        right_layout.addWidget(self.theme_manager.create_label("时间"))
         right_layout.addWidget(self.time_input)
-        right_layout.addWidget(QLabel("事件"))
+        right_layout.addWidget(self.theme_manager.create_label("事件"))
         right_layout.addWidget(self.event_input)
-        right_layout.addWidget(QLabel("优先级(1-10)"))
+        right_layout.addWidget(self.theme_manager.create_label("优先级(1-10)"))
         right_layout.addWidget(self.priority_input)
         right_layout.addLayout(btn_layout)
 
@@ -146,11 +158,11 @@ class UIManifester(QWidget):
 
         # ================================================
 
+        # ================ Global Vars ===================
+
         self.creating = True
         self.current_uid = None
         self.timestr = None
-        self.keep_on_top = True
-        self.event_reminder = True
         self.reminded_events = set()  # 记录已提醒过的事件 UID
         self.event_len = event_len
         self.remove_reminded_events = set()
@@ -167,6 +179,9 @@ class UIManifester(QWidget):
         self.event_refresh_timer = QTimer(self)
         self.event_refresh_timer.timeout.connect(self.load_events)
         self.event_refresh_timer.start(100 * 1000)
+
+        QApplication.instance().focusChanged.connect(self.on_focus_changed)
+
 
     def animate_opacity(self, target_opacity: float, duration: int = 300):
         """渐变动画修改窗口透明度（保留 anim 避免被回收）"""
@@ -247,7 +262,7 @@ class UIManifester(QWidget):
             self.save_btn.setText("新建保存")
 
             self.mode_label.setText("当前模式: 新建")
-            self.mode_label.setStyleSheet("color: #6813A4; font-weight: bold;")
+            self.mode_label.setStyleSheet(f"color: {self.theme_color_map['new']}; font-weight: bold;")
 
     def precheck_and_get_uid(self):
         """保存：根据当前模式执行 add 或 update"""
@@ -286,6 +301,33 @@ class UIManifester(QWidget):
             self.event_scheduler.update_event(uid, (self.timestr, event, priority, finished))
 
         return uid
+    
+    def on_focus_changed(self, old_widget, new_widget):
+        input_widgets = []
+        
+        # 安全地收集输入框
+        if hasattr(self, 'time_input') and self.time_input:
+            input_widgets.append(self.time_input)
+        if hasattr(self, 'event_input') and self.event_input:
+            input_widgets.append(self.event_input)
+        if hasattr(self, 'priority_input') and self.priority_input:
+            input_widgets.append(self.priority_input) 
+
+        if hasattr(self, 'creating') and self.creating:
+            return
+
+        if new_widget in input_widgets and old_widget == self.event_list:
+            if hasattr(self, 'mode_label') and self.mode_label.text() != "当前模式: 编辑":
+                self.switch_to_edit_mode()
+
+    def switch_to_edit_mode(self):
+        """切换到编辑模式"""
+        # self.creating = False
+        if hasattr(self, 'save_btn'):
+            self.save_btn.setText("更新保存")
+        if hasattr(self, 'mode_label'):
+            self.mode_label.setText("当前模式: 编辑")
+            self.mode_label.setStyleSheet(f"color: {self.theme_color_map['edit']}; font-weight: bold;")
 
     def on_save(self):
         with self.operation_lock:
@@ -298,11 +340,13 @@ class UIManifester(QWidget):
             self.save_btn.setText("新建保存")
 
             self.mode_label.setText("当前模式: 新建")
-            self.mode_label.setStyleSheet("color: #6813A4; font-weight: bold;")
+            self.mode_label.setStyleSheet(f"color: {self.theme_color_map['new']}; font-weight: bold;")
 
         self.load_events()
 
     def on_delete(self, preset_uid=None):
+        current_row = self.event_list.currentRow()
+
         with self.operation_lock:
             if preset_uid is None or not preset_uid:
                 selected_items = self.event_list.selectedItems()
@@ -330,9 +374,18 @@ class UIManifester(QWidget):
             self.save_btn.setText("新建保存")
 
             self.mode_label.setText("当前模式: 新建")
-            self.mode_label.setStyleSheet("color: #6813A4; font-weight: bold;")
+            self.mode_label.setStyleSheet(f"color: {self.theme_color_map['new']}; font-weight: bold;")
 
         self.load_events()
+
+        if current_row >= self.event_list.count():
+            current_row = self.event_list.count() - 1
+
+        self.event_list.setCurrentRow(current_row)
+        self.event_list.scrollToItem(self.event_list.item(current_row))
+        item = self.event_list.item(current_row)
+        if item:
+            self.show_event_detail(item, prev='keep_mode')
 
     def on_check(self):
         with self.operation_lock:
@@ -340,9 +393,11 @@ class UIManifester(QWidget):
             if not selected_items:
                 QMessageBox.warning(self, "提示", "请先选中要标记完成/未完成的事件")
                 return
-
+            
+            selected_uids = []
             for item in selected_items:
                 uid = item.data(Qt.UserRole)
+                selected_uids.append(uid)
                 try:
                     finished_status = int(self.event_scheduler.get_finished_status(uid))
                     self.event_scheduler.set_finished_status(uid, int(not finished_status))
@@ -351,6 +406,24 @@ class UIManifester(QWidget):
                     return
 
         self.load_events()
+        self.restore_selection(selected_uids)     # 恢复刚刚选中的焦点
+
+    
+    def restore_selection(self, selected_uids):
+        if not selected_uids:
+            return
+
+        for i in range(self.event_list.count()):
+            item = self.event_list.item(i)
+
+            if item.data(Qt.UserRole) in selected_uids:
+                item.setSelected(True)
+
+                if len(selected_uids) == 1:
+                    self.event_list.setCurrentItem(item)
+                    self.event_list.scrollToItem(item)
+
+                break
 
     def sort_eventlist(self, sort_key=0):
         self.event_list.clear()
@@ -360,7 +433,7 @@ class UIManifester(QWidget):
         for uid, (time, event, priority, finished) in events.items():
             event_list.append((time, uid, event, priority, finished))
 
-        event_list.sort(key=lambda x: x[sort_key])
+        event_list.sort(key=lambda x: int(x[sort_key]))
         return event_list
 
     def load_events(self, filter_priority=2):
@@ -387,17 +460,19 @@ class UIManifester(QWidget):
 
                 display_time = f'{time[-8:-6]}-{time[-6:-4]} {time[-4:-2]}:{time[-2:]}'
                 display_event = event.replace("\\n", " ")
-                display_text = f"{display_time}   {display_event[:self.event_len]}   P{priority}"
+                display_text = f"{display_time}   {display_event[:self.event_len]}"
                 item = QListWidgetItem(display_text)
 
                 # 隐藏uid
                 item.setData(Qt.UserRole, uid)
 
                 if int(priority) <= 2:
-                    item.setForeground(QColor("#952140"))
+                    item.setForeground(QColor(self.theme_color_map['highlight']))
+                else:
+                    item.setForeground(QColor(self.theme_color_map['normal']))
 
                 if int(finished) == 1:
-                    item.setBackground(QColor("#C7F2C4"))
+                    item.setBackground(QColor(self.theme_color_map['completed']))
 
                 self.event_list.addItem(item)
 
@@ -430,6 +505,7 @@ class UIManifester(QWidget):
 
         event_manager = EventContentManager(event)
         event_manager.n_to_newline()
+        event_manager.cleanup_str()
         event = event_manager.event_str
 
         time_formatter = TimeFormatter(time)
@@ -443,10 +519,10 @@ class UIManifester(QWidget):
 
         if prev is None:
             self.mode_label.setText("当前模式: 编辑")
-            self.mode_label.setStyleSheet("color: #58A1AB; font-weight: bold;")
+            self.mode_label.setStyleSheet(f"color: {self.theme_color_map['edit']}; font-weight: bold;")
         else:
             self.mode_label.setText("当前模式: 预览")
-            self.mode_label.setStyleSheet("color: gray; font-weight: normal;")
+            self.mode_label.setStyleSheet(f"color: {self.theme_color_map['view']}; font-weight: bold;")
 
     def clear_inputs(self):
 
@@ -495,7 +571,7 @@ class UIManifester(QWidget):
 
 
     def show_event_reminder(self, uid, event_time, event, priority, finished):
-        msg = QMessageBox(self)
+        msg = self.theme_manager.create_message_box()
         msg.setWindowTitle("事件提醒")
         msg.setText(
             f"事件即将开始：\n\n"
@@ -527,38 +603,77 @@ class UIManifester(QWidget):
             self.reminded_events.remove((uid, event_time.strftime("%Y%m%d%H%M")))
 
 
-    def keyPressEvent(self, event):
-        if self.event_list.hasFocus():  # 左侧列表聚焦时
-            if event.key() in (Qt.Key_Return, Qt.Key_Enter):
-                self.time_input.setFocus()   # 焦点切到时间输入框
+    def eventFilter(self, source, event):
+        """事件过滤器：捕获 QListWidget 的按键事件"""
+        if source == self.event_list and event.type() == QEvent.KeyPress:
+            if event.key() == Qt.Key_Space:
+                self.on_check()
+                return True  # 阻止事件继续传播
+            elif event.key() == Qt.Key_N:  
+                self.on_new()
+                return True
+            elif event.key() == Qt.Key_W:
+                self.move_selection_up()
+                return True
+            elif event.key() == Qt.Key_S:
+                self.move_selection_down()
+                return True
+            elif event.key() in (Qt.Key_Return, Qt.Key_Enter):
+                self.time_input.setFocus()
                 self.creating = False
                 self.save_btn.setText("更新保存")
                 self.mode_label.setText("当前模式: 编辑")
-                self.mode_label.setStyleSheet(f"color: #58A1AB; font-weight: bold;")
+                self.mode_label.setStyleSheet(f"color: {self.theme_color_map['edit']}; font-weight: bold;")
+                return True
             elif event.key() in (Qt.Key_Delete, Qt.Key_Backspace):
-                self.on_delete(self.current_uid)
+                self.on_delete()
+                return True
+    
+        # 对于其他事件，调用父类处理
+        return super().eventFilter(source, event)
+    
 
-        elif self.time_input.hasFocus() or self.event_input.hasFocus() or self.priority_input.hasFocus():
+    def move_selection_up(self):
+        current_row = self.event_list.currentRow()
+        if current_row > 0:
+            new_row = current_row - 1
+            self.event_list.setCurrentRow(new_row)
+            self.event_list.scrollToItem(self.event_list.item(new_row))
+            item = self.event_list.item(new_row)
+            if item:
+                self.show_event_detail(item, prev='keep_mode')
+
+    def move_selection_down(self):
+        current_row = self.event_list.currentRow()
+        if current_row < self.event_list.count() - 1:
+            new_row = current_row + 1
+            self.event_list.setCurrentRow(new_row)
+            self.event_list.scrollToItem(self.event_list.item(new_row))
+            item = self.event_list.item(new_row)
+            if item:
+                self.show_event_detail(item, prev='keep_mode')
+
+
+    def keyPressEvent(self, event):
+        if self.time_input.hasFocus() or self.event_input.hasFocus() or self.priority_input.hasFocus():
             if event.key() == Qt.Key_Escape:
                 self.event_list.setFocus()   # 焦点回到左侧列表
                 self.mode_label.setText("当前模式: 预览")
-                self.mode_label.setStyleSheet("color: gray; font-weight: normal;")
+                self.mode_label.setStyleSheet(f"color: {self.theme_color_map['view']}; font-weight: bold;")
 
         super().keyPressEvent(event)
 
 
     def open_settings(self):
-        dlg = SettingsDialog(self,
-                keep_on_top=self.keep_on_top,
-                event_reminder=self.event_reminder
-        )
-
-        if dlg.exec_():
-            settings = dlg.get_settings()
+        if self.dlg.exec_():
+            settings = self.dlg.get_settings()
             self.keep_on_top = settings["keep_on_top"]
             self.event_reminder = settings['event_reminder']
+            self.theme = settings['theme']
+            self.theme_manager.theme = self.theme
             self.apply_keep_on_top()
             self.apply_event_reminder()
+            self.apply_theme()
 
     def apply_keep_on_top(self):
         """根据设置应用窗口是否置顶"""
@@ -572,9 +687,71 @@ class UIManifester(QWidget):
         else:
             self.timer.stop()
 
+    def apply_theme(self):
+        """安全地应用主题变更"""
+        # 更新主题管理器
+        self.theme_manager.theme = self.theme
+        self.theme_color_map = self.theme_manager.set_theme_color()
+        
+        # 更新主窗口样式
+        if self.theme == 'dark':
+            self.setStyleSheet(f"background-color: {self.theme_color_map['main_bg_color']};")
+        else:
+            self.setStyleSheet("")  # 重置为默认样式
+        
+        # 更新所有UI组件样式
+        self.update_ui_styles()
+        
+        # 保持当前状态
+        self.load_events()  # 重新加载事件以更新颜色
+
+    def update_ui_styles(self):
+        """更新所有UI组件的样式"""
+        # 更新按钮样式
+        for btn in [self.cleanup_outdated_btn, self.new_btn, self.save_btn, 
+                    self.delete_btn, self.check_btn, self.btn_settings]:
+            btn.setStyleSheet(self.theme_manager.get_button_style())
+        
+        # 更新输入框样式
+        self.time_input.setStyleSheet(self.theme_manager.get_line_edit_style())
+        self.event_input.setStyleSheet(self.theme_manager.get_text_edit_style())
+        self.priority_input.setStyleSheet(self.theme_manager.get_spin_box_style())
+        
+        # 更新下拉菜单样式
+        self.filter_combo.setStyleSheet(self.theme_manager.get_combo_box_style())
+        self.sort_combo.setStyleSheet(self.theme_manager.get_combo_box_style())
+        
+        # 更新标签样式
+        for label in self.findChildren(QLabel):
+            if label not in [self.mode_label]:  # 特殊标签单独处理
+                label.setStyleSheet(self.theme_manager.get_label_style())
+        
+        # 更新特殊标签
+        self.update_mode_label_style()
+        
+        # 更新列表样式
+        self.event_list.setStyleSheet(self.theme_manager.get_list_widget_style())
+
+
+    def update_mode_label_style(self):
+        """更新模式标签的特殊样式"""
+        if self.creating:
+            color = self.theme_color_map['new']
+        elif self.event_list.currentItem() is not None:
+            color = self.theme_color_map['edit']
+        else:
+            color = self.theme_color_map['view']
+        
+        self.mode_label.setStyleSheet(
+            f"color: {color}; font-weight: bold;"
+        )
+
+    
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    # app.setStyle('Fusion')
     manager = DataManager('data/data.txt')
     window = UIManifester(manager, 10)
     window.show()

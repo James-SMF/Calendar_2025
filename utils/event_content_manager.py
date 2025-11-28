@@ -9,6 +9,9 @@ class EventContentManager:
     def n_to_newline(self):
         self.event_str = self.event_str.replace('\\n', '\n')
 
+    def cleanup_str(self):
+        self.event_str = self.event_str.strip()
+
     @property
     def event_len(self):
         return len(self.event_str)
